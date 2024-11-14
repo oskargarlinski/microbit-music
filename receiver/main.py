@@ -5,19 +5,20 @@ import radio
 radio.on()
 radio.config(length=200)
 
+# Initialize global variables
 my_microbit_id = 1
-microbit.display.show(my_microbit_id, wait=False)
-
 my_notes_data = {}
 
-while True:
-    received_message = radio.receive()
+# Display the initial microbit ID
+microbit.display.show(my_microbit_id, wait=False)
 
+
+def update_microbit_id():
+    global my_microbit_id
     if microbit.button_a.was_pressed():
         if my_microbit_id - 1 == 0:
             microbit.display.show(microbit.Image.NO)
             microbit.sleep(1000)
-            microbit.display.show(my_microbit_id, wait=False)
         else:
             my_microbit_id -= 1
             microbit.display.show(my_microbit_id, wait=False)
@@ -26,37 +27,50 @@ while True:
         my_microbit_id += 1
         microbit.display.show(my_microbit_id, wait=False)
 
+
+def receive_message():
+    received_message = radio.receive()
     if received_message:
-        # Check if the message starts with notes, if it does, then you know it's music data.
         if received_message.startswith("NOTES"):
-            # Split the received message into relevant parts - keyword (_), bar_number (bar_number), microbit_id (microbit_id) and notes data (notes_data)
-            _, bar_number, microbit_id, notes_data = received_message.split(":", 3)
-            # Cast the received data into proper data types
-            bar_number = int(bar_number)
-            microbit_id = int(microbit_id)
-
-            # Check if the microbit id matches
-            if microbit_id == my_microbit_id:
-                # Convert notes data back into a list
-                notes_list = notes_data.split(',')
-
-                # Store the notes list in the notes_data dictionary with the key of the bar number
-                my_notes_data[bar_number] = notes_list
-                print("Stored notes for bar", bar_number, ":", notes_list)
+            process_notes_message(received_message)
+        elif received_message.startswith("TICKS"):
+            process_ticks_message(received_message)
+        elif received_message.startswith("BPM"):
+            process_bpm_message(received_message)
 
 
-        # Check if the message starts with ticks, if it does, then you know it's tempo data.
-        if received_message.startswith("TICKS"):
-            _, value = received_message.split(':')
-            ticks = int(value)
-            music.set_tempo(ticks = ticks)
-            print("Music Ticks set to", ticks)
+def process_notes_message(message):
+    global my_notes_data
+    # Split the message into keyword (_), bar_number, microbit_id, and notes_data
+    _, bar_number, microbit_id, notes_data = message.split(":", 3)
+    bar_number = int(bar_number)
+    microbit_id = int(microbit_id)
 
-        # Check if the message starts with bpm, if it does, then you know it's tempo data.
-        if received_message.startswith("BPM") :
-            _, value = received_message.split(':')
-            bpm = int(value)
-            music.set_tempo(bpm = bpm)
-            print("Music BPM set to", bpm)
+    # Check if the microbit ID matches
+    if microbit_id == my_microbit_id:
+        # Convert notes data back into a list and store in my_notes_data
+        notes_list = notes_data.split(',')
+        my_notes_data[bar_number] = notes_list
+        print("Stored notes for bar", bar_number, ":", notes_list)
 
 
+def process_ticks_message(message):
+    # Process and set the ticks for tempo
+    _, value = message.split(':')
+    ticks = int(value)
+    music.set_tempo(ticks=ticks)
+    print("Music Ticks set to", ticks)
+
+
+def process_bpm_message(message):
+    # Process and set the BPM for tempo
+    _, value = message.split(':')
+    bpm = int(value)
+    music.set_tempo(bpm=bpm)
+    print("Music BPM set to", bpm)
+
+
+# Main loop
+while True:
+    update_microbit_id()
+    receive_message()
