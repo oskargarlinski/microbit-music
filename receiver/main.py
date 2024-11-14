@@ -1,6 +1,7 @@
 import microbit
 import music
 import radio
+import utime
 
 radio.on()
 radio.config(length=200)
@@ -8,6 +9,8 @@ radio.config(length=200)
 # Initialize global variables
 my_microbit_id = 1
 my_notes_data = {}
+start_time = None  # Placeholder for synchronized start time
+is_synchronized = False  # Flag to track synchronization status
 
 # Display the initial microbit ID
 microbit.display.show(my_microbit_id, wait=False)
@@ -29,7 +32,9 @@ def update_microbit_id():
 
 
 def receive_message():
+    global start_time, is_synchronized
     received_message = radio.receive()
+
     if received_message:
         if received_message.startswith("NOTES"):
             process_notes_message(received_message)
@@ -37,25 +42,29 @@ def receive_message():
             process_ticks_message(received_message)
         elif received_message.startswith("BPM"):
             process_bpm_message(received_message)
+        elif received_message.startswith("START_TIME"):
+            # Set the start time based on master's broadcast
+            _, start_time_str = received_message.split(":")
+            start_time = int(start_time_str)
+            is_synchronized = True
+            print("Synchronized start time set to:", start_time)
+            # Send confirmation to the master
+            radio.send("TIME_SYNC_CONFIRMED")
 
 
 def process_notes_message(message):
     global my_notes_data
-    # Split the message into keyword (_), bar_number, microbit_id, and notes_data
     _, bar_number, microbit_id, notes_data = message.split(":", 3)
     bar_number = int(bar_number)
     microbit_id = int(microbit_id)
 
-    # Check if the microbit ID matches
     if microbit_id == my_microbit_id:
-        # Convert notes data back into a list and store in my_notes_data
         notes_list = notes_data.split(',')
         my_notes_data[bar_number] = notes_list
         print("Stored notes for bar", bar_number, ":", notes_list)
 
 
 def process_ticks_message(message):
-    # Process and set the ticks for tempo
     _, value = message.split(':')
     ticks = int(value)
     music.set_tempo(ticks=ticks)
@@ -63,14 +72,27 @@ def process_ticks_message(message):
 
 
 def process_bpm_message(message):
-    # Process and set the BPM for tempo
     _, value = message.split(':')
     bpm = int(value)
     music.set_tempo(bpm=bpm)
     print("Music BPM set to", bpm)
 
 
+def synchronize_time():
+    global is_synchronized
+    if is_synchronized:
+        return
+
+    print("Sent out a request, waiting for master to broadcast start time.")
+    radio.send("TIME_REQUEST:{}".format(my_microbit_id))
+
+
 # Main loop
 while True:
     update_microbit_id()
     receive_message()
+
+    # Trigger time synchronization with a button combination (A + B pressed together)
+    if microbit.accelerometer.was_gesture("shake"):
+        synchronize_time()
+        microbit.display.show(microbit.Image.ALL_CLOCKS, loop=True, delay=100, wait=False)
